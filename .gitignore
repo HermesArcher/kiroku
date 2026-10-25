@@ -1,0 +1,11 @@
+# the editor engine is fetched + patched by scripts/engine.sh, never committed
+/engine/
+node_modules/
+app/engine-dist/
+app/release/
+app/dist/
+app/test-results/
+playwright-report/
+*.log
+.DS_Store
+Thumbs.db

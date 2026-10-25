@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Kiroku</title>
+<link rel="stylesheet" href="styles.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+  <header id="tabstrip">
+    <div id="tabs" role="tablist" aria-label="Open tabs"><i class="tab-pill" aria-hidden="true"></i></div>
+    <button id="newtab" class="tab-plus" type="button" aria-label="New document" title="New document, spreadsheet or presentation"></button>
+  </header>
+
+  <div id="shell">
+    <aside id="rail" aria-label="Kiroku">
+      <div class="brand">
+        <img src="assets/app.png" alt="" width="42" height="42">
+        <div class="brand-text">
+          <span class="wordmark">kiroku</span>
+          <span class="label">( <span class="kanji" lang="ja">記録</span> · offline suite )</span>
+        </div>
+      </div>
+      <div class="dial" aria-hidden="true"><i></i></div>
+      <nav id="nav" aria-label="Main"><i class="nav-pill" aria-hidden="true"></i></nav>
+      <div class="rail-art" aria-hidden="true">
+        <span class="fig">Fig. 01</span>
+        <strong><span class="paren">(</span>deep focus<span class="paren">)</span></strong>
+        <small>Ambient mode &middot; vol. 26</small>
+      </div>
+      <section id="player" class="rail-board" aria-label="Music player" title="Scroll here to change the volume">
+        <div class="lcd-top"><span id="pl-state">No tracks</span><span id="clock" class="lcd-clock">--:--</span></div>
+        <div class="pl-time"><b id="pl-pos">00:00</b><small id="pl-len"></small></div>
+        <div id="pl-title" class="pl-title"><span></span></div>
+        <div id="eq" class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <input id="pl-seek" class="pl-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek" disabled>
+        <div class="pl-ctl">
+          <button id="pl-prev" type="button" aria-label="Previous track" title="Previous" disabled></button>
+          <button id="pl-play" type="button" aria-label="Play" title="Play"></button>
+          <button id="pl-next" type="button" aria-label="Next track" title="Next" disabled></button>
+          <button id="pl-folder" type="button" aria-label="Choose music folder" title="Choose music folder"></button>
+          <span id="pl-no" class="pl-no" aria-hidden="true">00/00</span>
+        </div>
+      </section>
+    </aside>
+    <main id="main" tabindex="-1"></main>
+  </div>
+
+  <div id="dropveil" aria-hidden="true">
+    <div class="drop">
+      <div class="rings">
+        <i class="ring-a"></i><i class="ring-c"></i><i class="ring-b"></i>
+        <img src="assets/app.png" alt="" width="60" height="60">
+      </div>
+      <strong><span class="paren">(</span>drop to open<span class="paren">)</span></strong>
+      <span class="label">DOCX &middot; XLSX &middot; PPTX &middot; PDF</span>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,119 @@
+{
+  "name": "kiroku",
+  "productName": "Kiroku",
+  "version": "1.0.0",
+  "description": "Kiroku - offline office suite: documents, spreadsheets, presentations and PDF.",
+  "author": "Kiroku contributors",
+  "license": "AGPL-3.0",
+  "main": "main/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "icons": "node scripts/make-icons.js",
+    "prepare-engine": "node scripts/prepare-engine.js",
+    "test": "node --test \"test/*.test.js\"",
+    "e2e": "playwright test",
+    "dist": "npm run prepare-engine && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "pdf-lib": "1.17.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "electron": "44.9.3",
+    "electron-builder": "26.15.3",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.5"
+  },
+  "build": {
+    "appId": "com.kiroku.office",
+    "productName": "Kiroku",
+    "copyright": "Copyright (C) 2026 Kiroku contributors",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main/**",
+      "preload/**",
+      "renderer/**",
+      "package.json",
+      "templates/**"
+    ],
+    "extraResources": [
+      {
+        "from": "engine-dist",
+        "to": "engine"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "executableName": "Kiroku",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Kiroku",
+      "include": "build/installer.nsh"
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "docx",
+          "doc",
+          "odt",
+          "rtf",
+          "txt"
+        ],
+        "name": "Kiroku.Word",
+        "description": "Kiroku Document",
+        "icon": "word.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "xlsx",
+          "xls",
+          "ods",
+          "csv"
+        ],
+        "name": "Kiroku.Cell",
+        "description": "Kiroku Spreadsheet",
+        "icon": "cell.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "pptx",
+          "ppt",
+          "odp"
+        ],
+        "name": "Kiroku.Slide",
+        "description": "Kiroku Presentation",
+        "icon": "slide.ico",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "pdf"
+        ],
+        "name": "Kiroku.Pdf",
+        "description": "Kiroku PDF",
+        "icon": "pdf.ico",
+        "role": "Editor"
+      }
+    ]
+  }
+}
