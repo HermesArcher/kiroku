@@ -114,6 +114,7 @@ interface ShellBridge {
   getSettings(): Promise<Settings>;
   setSettings(patch: Partial<Settings>): Promise<Settings>; // theme applied immediately via nativeTheme.themeSource
   openDefaultApps(): void;              // ms-settings:defaultapps?registeredAppUser=Kiroku (fallback ms-settings:defaultapps)
+  defaultStatus(): Promise<string[]>;   // of docx/xlsx/pptx/pdf, those whose UserChoice ProgId isn't Kiroku.* (Home "Set as default" strip)
   // --- tabs / multi-window (additive; every call acts for the window that sent it) ---
   tabMenu(id: string): void;            // native context menu for a doc tab: Tab colour > None/Aqua/Lime/Lilac/Coral/Sky/Sand, Bold title, Move to new window | Move back to main window, Close tab
   setTabStyle(id: string, patch: { color?: string | null; bold?: boolean }): void; // colour must be a palette hex (#22AFC4 #9BCB2A #8B79E0 #F0653F #1FA6D8 #D9B26A) else null; persisted per file path in settings.json (tabStyles)
@@ -146,7 +147,7 @@ Search (main/search.js `searchSmart`): if Everything's `es.exe` is found (PATH, 
 - Several Kiroku windows may exist: the main window plus torn-out ones (same shell renderer, own Home tab). `win` in main.js is the LAST-FOCUSED window; new tabs, dialogs and second-instance file opens go there.
 - Tear-out / re-dock re-parents the tab's existing WebContentsView (removeChildView -> addChildView): no reload, unsaved edits and page state survive.
 - Closing a torn-out window runs the unsaved-changes prompts for its own tabs only; closing the main window prompts for every tab, then quits (torn-out windows close with it). A torn-out window with no tabs left closes itself.
-- Editor tab switch animation runs inside the editor page (opacity + 10px rise, 280ms, Web Animations on <html>); a hidden tab is parked at opacity 0 (`html.kiroku-prime`) and un-parked by the animation when shown. Off under prefers-reduced-motion.
+- Editor tab switches are instant: the view is shown with the frame it last painted, in place. Only the tab-strip capsule glides (180ms). No in-page enter animation: it can only start after the view is visible, which showed a blank frame then a slide.
 - Test hook (KIROKU_TEST_DIR set only): `globalThis.__kirokuCursor = {x, y}` in main overrides the OS cursor for `moveTab(id, 'drop')`.
 
 ## PDF tools (main/pdf-tools.js, pdf-lib 1.17.1; ipc channel 'pdf:<op>')

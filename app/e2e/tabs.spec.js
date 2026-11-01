@@ -13,19 +13,17 @@ const hookState = (p) => p.evaluate(() => { if (!window.__e2eHook) { window.__e2
 const stateOf = (p) => p.evaluate(() => window.__e2eState);
 const untilState = (p, pred, what) => L.until(async () => { const s = await stateOf(p); return s && pred(s) ? s : null; }, { what });
 
-/** Poll the page for `ms`, recording the 280ms enter animation (Web Animations on <html>) and the html class. */
-const sampleEnter = (page, ms = 600) => page.evaluate(async (ms) => {
-  const out = []; const t0 = performance.now();
+/** Poll the page for `ms`, recording animations on <html> and its computed opacity. */
+const sampleRoot = (page, ms = 500) => page.evaluate(async (ms) => {
+  const out = []; const t0 = performance.now(); const r = document.documentElement;
   while (performance.now() - t0 < ms) {
-    const r = document.documentElement;
-    const anim = document.getAnimations().find((a) => a.effect && a.effect.target === r && a.effect.getTiming().duration === 280);
-    out.push({ t: Math.round(performance.now() - t0), anim: !!anim, kf: anim ? anim.effect.getKeyframes().map((k) => k.transform || '') : [], cls: r.className });
+    out.push({ anims: document.getAnimations().filter((a) => a.effect && a.effect.target === r).length, op: getComputedStyle(r).opacity });
     await new Promise((res) => setTimeout(res, 30));
   }
   return out;
 }, ms);
 
-test('T1: switching tabs visibly animates: editor page enter, sliding capsule, back-to-home replay', async () => {
+test('T1: switching tabs is instant: editor shown as painted, sliding capsule, no home replay', async () => {
   const app = await L.launch({ args: ['--new=docx', '--new=xlsx'] });
   try {
     const e1 = await app.nextEditor();
@@ -61,43 +59,29 @@ test('T1: switching tabs visibly animates: editor page enter, sliding capsule, b
     fin = await pill();
     expect(fin.tf).toBe(`matrix(1, 0, 0, 1, ${fin.left}, 0)`);
 
-    // --- editor page: parked at opacity 0 while hidden, then animates (opacity + 10px rise + scale) on every show
-    await act('home'); await app.waitState((s) => s.activeId === 'home', 'home');
-    await L.sleep(400);
-    expect(await e1.evaluate(() => document.documentElement.classList.contains('kiroku-prime'))).toBe(true); // primed when hidden
-
-    // nextEditor() page order is load order, not tab order (packaged builds load both at once): sample both pages and
-    // let the animation say which one belongs to the activated tab
-    const used = new Set();
-    for (const [name, id] of [['home->editor', t1], ['editor->editor', t2]]) {
-      const runs = [e1, e2].map((p) => sampleEnter(p));
+    // --- editor pages: shown as painted, never faded or slid (no animation on <html>, opacity stays 1 through every switch)
+    for (const id of ['home', t1, t2, t1]) {
+      const runs = [e1, e2].map((p) => sampleRoot(p));
       await act(id);
-      const all = await Promise.all(runs);
-      const k = all.findIndex((fr) => fr.filter((f) => f.anim).length > 2);
-      const page = [e1, e2][k];
-      const hit = k < 0 ? [] : all[k].filter((f) => f.anim);
-      expect(used.has(k), `${name}: a different page than the previous step`).toBe(false);
-      used.add(k);
-      expect(hit.length, `${name}: enter animation seen`).toBeGreaterThan(2);
-      expect(hit[0].kf.join('|')).toContain('translateY(10px)');
-      await L.sleep(300);
-      expect(await page.evaluate(() => document.documentElement.classList.contains('kiroku-prime'))).toBe(false); // visible again, never left invisible
-      expect(await page.evaluate(() => getComputedStyle(document.documentElement).opacity)).toBe('1');
+      for (const fr of await Promise.all(runs)) expect(fr.filter((f) => f.anims || f.op !== '1'), `switch to ${id}`).toEqual([]);
     }
 
-    // --- editor -> home: the page entrance replays on the shell
+    // --- editor -> home: the page is already painted behind the view, so no entrance replay
     const homeRun = sp.evaluate(async () => {
       const out = []; const t0 = performance.now();
       while (performance.now() - t0 < 500) {
         const pg = document.querySelector('#main .page');
-        out.push({ cls: pg ? pg.className : '', anims: pg ? document.getAnimations().filter((a) => a.animationName === 'rise-in').length : 0 });
+        out.push({ cls: pg ? pg.className : '', anims: document.getAnimations().filter((a) => a.animationName === 'rise-in').length });
         await new Promise((r) => setTimeout(r, 30));
       }
       return out;
     });
     await act('home');
     const hf = await homeRun;
-    expect(hf.some((f) => /enter/.test(f.cls) && f.anims > 0)).toBe(true);
+    expect(hf.some((f) => /enter/.test(f.cls) || f.anims > 0)).toBe(false);
+    // every tab has its own view-transition name (duplicates abort the add/close transition)
+    const names = await sp.evaluate(() => [...document.querySelectorAll('#tabs .tab')].map((t) => t.style.viewTransitionName));
+    expect(new Set(names).size).toBe(names.length);
     expect(app.log(/\[kiroku\]\s+(load-failed|crash)/)).toEqual([]);
   } finally { await app.kill(); }
 });

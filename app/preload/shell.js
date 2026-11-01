@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('shell', {
   getSettings: () => inv('shell:getSettings'),
   setSettings: (patch) => inv('shell:setSettings', patch),
   openDefaultApps: () => send('shell:openDefaultApps'),
+  defaultStatus: () => inv('shell:defaultStatus'),
   openRecovery: () => send('shell:openRecovery'),
   getInfo: () => inv('shell:getInfo'),
   music: () => inv('shell:music'),

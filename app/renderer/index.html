@@ -31,18 +31,23 @@
         <strong><span class="paren">(</span>deep focus<span class="paren">)</span></strong>
         <small>Ambient mode &middot; vol. 26</small>
       </div>
-      <section id="player" class="rail-board" aria-label="Music player" title="Scroll here to change the volume">
+      <section id="player" class="rail-board" aria-label="Music player">
         <div class="lcd-top"><span id="pl-state">No tracks</span><span id="clock" class="lcd-clock">--:--</span></div>
         <div class="pl-time"><b id="pl-pos">00:00</b><small id="pl-len"></small></div>
-        <div id="pl-title" class="pl-title"><span></span></div>
+        <div class="pl-track-row"><div id="pl-title" class="pl-title"><span></span></div><span id="pl-no" class="pl-no" aria-hidden="true">00/00</span></div>
         <div id="eq" class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <input id="pl-seek" class="pl-seek" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek" disabled>
         <div class="pl-ctl">
           <button id="pl-prev" type="button" aria-label="Previous track" title="Previous" disabled></button>
           <button id="pl-play" type="button" aria-label="Play" title="Play"></button>
           <button id="pl-next" type="button" aria-label="Next track" title="Next" disabled></button>
+          <button id="pl-shuffle" type="button" aria-label="Shuffle" aria-pressed="false" title="Shuffle off"></button>
+          <button id="pl-volume-button" type="button" aria-label="Volume" aria-expanded="false" aria-controls="pl-volume-popup" title="Volume"></button>
           <button id="pl-folder" type="button" aria-label="Choose music folder" title="Choose music folder"></button>
-          <span id="pl-no" class="pl-no" aria-hidden="true">00/00</span>
+        </div>
+        <div id="pl-volume-popup" class="pl-volume-popup" hidden>
+          <label for="pl-volume">Volume</label><output id="pl-volume-value" for="pl-volume">100%</output>
+          <input id="pl-volume" type="range" min="0" max="100" step="1" value="100" aria-label="Volume">
         </div>
       </section>
     </aside>

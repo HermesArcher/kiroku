@@ -13,7 +13,8 @@ changes in [engine.patch](engine.patch); [scripts/engine.sh](scripts/engine.sh) 
 - **ONLYOFFICE editors** (sdkjs, web-apps) and the x2t converter: Copyright (C) Ascensio System SIA,
   AGPL-3.0 with additional terms under Section 7. Sources: https://github.com/ONLYOFFICE/sdkjs,
   https://github.com/ONLYOFFICE/web-apps. ONLYOFFICE GUI elements (illustrations, icon sets) are
-  under CC BY-SA 4.0. Each editor's About pane shows the original ONLYOFFICE logo. The full upstream
+  under CC BY-SA 4.0. Each editor's About pane and Kiroku's Settings > About show the original
+  ONLYOFFICE logo (unmodified copies in `app/renderer/assets/onlyoffice/`). The full upstream
   notice, including how the logo term is handled, is in the engine's `NOTICE` file (after
   `scripts/engine.sh setup`, at `engine/NOTICE`).
 - **ONLYOFFICE is a trademark of Ascensio System SIA.** Kiroku is not affiliated with or endorsed by

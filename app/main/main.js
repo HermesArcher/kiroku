@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { fileURLToPath } = require('url');
+const { execFile } = require('child_process');
 const electron = require('electron');
 const { app, BrowserWindow, WebContentsView, Menu, dialog, ipcMain, nativeTheme, session, shell, screen } = electron;
 
@@ -167,24 +168,11 @@ function layout(W) {
       const show = t.id === w.activeId;
       t.view.setBounds({ x: 0, y: BAR, width, height: Math.max(0, height - BAR) });
       t.view.setVisible(show);
-      if (show !== t.shown) { t.shown = show; if (show) playEnter(t); else primeEnter(t); }
     }
   }
 }
-
-// Editor tab switch animation, run INSIDE the editor page (Web Animations on <html>): opacity 0 -> 1 (the view's own background is the
-// theme colour, so it fades up from the theme background), +10px rise, 280ms (no scale: rescaling the editor canvas re-rasterizes it and shimmers). It is a pair:
-//  - primeEnter: when a tab is hidden, its page is parked at opacity 0 (html.kiroku-prime) so the next show never flashes old content;
-//  - playEnter: when it is shown (or first loads), animate() with fill 'backwards' holds the first keyframe from the very frame it starts,
-//    then the prime class is dropped. Never touches focus or input; skipped (and un-primed) under prefers-reduced-motion.
-// (The previous overlay version started AFTER the view was already visible, so the editor flashed for a frame and the fade-out
-// of a flat colour was barely visible; there was no motion at all.)
-const ENTER_CSS = 'html.kiroku-prime{opacity:0!important}';
-const PRIME_JS = "(()=>{if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('kiroku-prime')})()";
-const ENTER_JS = "(()=>{const r=document.documentElement;if(!matchMedia('(prefers-reduced-motion: reduce)').matches){try{r.animate([{opacity:0,transform:'translateY(10px)'},{opacity:1,transform:'none'}],{duration:280,easing:'cubic-bezier(.22,.61,.36,1)',fill:'backwards'})}catch(e){}}r.classList.remove('kiroku-prime')})()";
-const pageOf = (tab) => { const wc = tab && tab.view && tab.view.webContents; return wc && !wc.isDestroyed() ? wc : null; };
-const playEnter = (tab) => { const wc = pageOf(tab); if (wc) wc.executeJavaScript(ENTER_JS).catch(() => {}); };
-const primeEnter = (tab) => { const wc = pageOf(tab); if (wc) wc.executeJavaScript(PRIME_JS).catch(() => {}); };
+// Tab switches are instant: the view comes back with the frame it last painted, in place. No in-page enter animation: it could only
+// start after the view was already visible (async executeJavaScript), so every switch showed a blank frame, then a fade + 10px slide.
 
 // W0 = window to use when the id is 'home' (a tab id always knows its own window)
 function activate(id, W0) {
@@ -230,11 +218,9 @@ function attachView(tab) {
   view.setBackgroundColor(pal().bg);
   const wc = view.webContents;
   tab.view = view;
-  tab.shown = true; // a fresh view starts visible; layout() hides/primes it if it is not the active tab
   tab.w.win.contentView.addChildView(view);
 
   wc.on('will-prevent-unload', (e) => e.preventDefault()); // we run our own dirty prompts
-  wc.on('dom-ready', () => { wc.insertCSS(ENTER_CSS).catch(() => {}); if (tab.view === view && tab.w.activeId === tab.id) playEnter(tab); }); // a new document animates in
   shortcuts(wc, () => tab.w);
 
   wc.setWindowOpenHandler(({ url }) => {
@@ -296,7 +282,7 @@ function attachView(tab) {
 }
 
 function createTab(init) {
-  const tab = { id: 't' + ++tabSeq, dirty: false, closing: false, path: null, ext: null, boot: null, view: null, w: curW, shown: true, color: null, bold: false, ...init };
+  const tab = { id: 't' + ++tabSeq, dirty: false, closing: false, path: null, ext: null, boot: null, view: null, w: curW, color: null, bold: false, ...init };
   if (!tab.w || tab.w.win.isDestroyed()) return null;
   if (tab.path) Object.assign(tab, tabStyles().get(tab.path)); // colour / bold remembered per file
   tabs.set(tab.id, tab);
@@ -364,7 +350,6 @@ function moveTab(tab, to) {
   tab.w = to;
   tabs.delete(tab.id); tabs.set(tab.id, tab); // last tab of the new window
   to.win.contentView.addChildView(tab.view);
-  tab.shown = false; // layout() will show it and play the enter animation
   dbg('tab moved', tab.id, from.main ? 'main' : 'other', '->', to.main ? 'main' : 'other');
   if (from.activeId === tab.id) activate(ids[idx + 1] || ids[idx - 1] || 'home', from);
   else broadcast(from);
@@ -562,6 +547,13 @@ function registerIpc() {
   onShell('shell:openDefaultApps', () => {
     shell.openExternal('ms-settings:defaultapps?registeredAppUser=Kiroku').catch(() => shell.openExternal('ms-settings:defaultapps').catch(() => {}));
   });
+  // Main types Explorer still opens with another app. UserChoice is Windows-owned, so we only read it.
+  handleShell('shell:defaultStatus', () => process.platform !== 'win32' ? [] : Promise.all(['docx', 'xlsx', 'pptx', 'pdf'].map((ext) => new Promise((done) => {
+    execFile('reg', ['query', `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.${ext}`, '/s'], { windowsHide: true }, (_err, out) => {
+      const ids = [...String(out || '').matchAll(/^\s+ProgId\s+REG_SZ\s+(\S+)/gim)].map((m) => m[1]);
+      done(ids.length && ids[ids.length - 1].startsWith('Kiroku.') ? null : ext);
+    });
+  }))).then((exts) => exts.filter(Boolean)));
   onShell('shell:openRecovery', openRecovery);
   // tabs: colour/bold (persisted per file), tear-out / re-dock (see docs/ARCHITECTURE.md)
   onShell('shell:tabMenu', (id) => tabMenu(tabs.get(id), curW));

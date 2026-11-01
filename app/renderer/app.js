@@ -28,6 +28,9 @@
     pause: 'M8.5 6v12M15.5 6v12',
     prev: 'M6.5 6v12M18 6.8v10.4L9.8 12z',
     next: 'M17.5 6v12M6 6.8v10.4l8.2-5.2z',
+    shuffle: 'M3 6h3c5 0 7 12 12 12h3M17 14l4 4-4 4M3 18h3c2 0 3.5-2 5-5M14 8c1.3-1.3 2.6-2 4-2h3M17 2l4 4-4 4',
+    volume: 'M11 4 6 8H3v8h3l5 4zM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14',
+    muted: 'M11 4 6 8H3v8h3l5 4zM16 9l6 6M22 9l-6 6',
     arrow: 'M5 12h13M13 7l5 5-5 5',
   };
   const svg = (name, cls) => {
@@ -175,7 +178,7 @@
     for (const t of app.tabs) {
       const active = t.id === app.activeId;
       const kc = KINDS[t.kind] ? KINDS[t.kind].color : 'var(--aqua)';
-      const style = { '--kc': kc, 'view-transition-name': 'tab-' + t.id.replace(/[^w-]/g, '_') };
+      const style = { '--kc': kc, 'view-transition-name': 'tab-' + t.id }; // ids are 't<n>' (the old /[^w-]/ mangled every one to the same name, which aborted the transition)
       if (t.color) style['--tc'] = t.color;
       wrap.append(h('div', {
         class: 'tab' + (active ? ' active' : '') + (t.dirty ? ' dirty' : '') + (t.color ? ' tinted' : '') + (t.bold ? ' bold' : ''), role: 'tab', tabindex: active ? '0' : '-1', 'data-id': t.id,
@@ -273,17 +276,50 @@
   // Spectrum = Web Audio analyser, drawn only while playing and the home view is showing. Media keys via mediaSession.
   const audio = new Audio();
   audio.preload = 'metadata';
-  const pl = { dir: null, list: [], i: 0, ctx: null, an: null, raf: 0, ft: 0 };
-  try { const s = JSON.parse(localStorage.getItem('kiroku.player')) || {}; pl.i = s.i | 0; if (s.vol >= 0 && s.vol <= 1) audio.volume = s.vol; } catch (_) { /* defaults */ }
-  const savePl = () => { try { localStorage.setItem('kiroku.player', JSON.stringify({ i: pl.i, vol: audio.volume })); } catch (_) { /* fine */ } };
+  const pl = { dir: null, list: [], order: [], shuffle: false, i: 0, ctx: null, an: null, raf: 0, ft: 0 };
+  try { const s = JSON.parse(localStorage.getItem('kiroku.player')) || {}; pl.i = s.i | 0; pl.shuffle = s.shuffle === true; if (typeof s.vol === 'number' && s.vol >= 0 && s.vol <= 1) audio.volume = s.vol; } catch (_) { /* defaults */ }
+  const savePl = () => { try { localStorage.setItem('kiroku.player', JSON.stringify({ i: pl.i, vol: audio.volume, shuffle: pl.shuffle })); } catch (_) { /* fine */ } };
   const mmss = (s) => { s = Math.max(0, Math.floor(s || 0)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
   const bars = [...document.querySelectorAll('#eq i')];
   const BIN = bars.map((_, i) => 1 + i + Math.round(48 * (i / (bars.length - 1)) ** 2.2)); // low bins packed left, ~190 Hz .. 12 kHz (mp3s cut off ~16 kHz)
   const fft = new Uint8Array(128);
-  const seek = $('#pl-seek'), playBtn = $('#pl-play');
+  const seek = $('#pl-seek'), playBtn = $('#pl-play'), shuffleBtn = $('#pl-shuffle'), volume = $('#pl-volume');
+  const volumeBtn = $('#pl-volume-button'), volumePopup = $('#pl-volume-popup');
   $('#pl-prev').append(svg('prev'));
   $('#pl-next').append(svg('next'));
   $('#pl-folder').append(svg('folder'));
+  shuffleBtn.append(svg('shuffle'));
+
+  // Shuffle one complete play order, keeping the current song first. Previous retraces that order.
+  function orderTracks() {
+    pl.order = pl.list.map((_, i) => i);
+    if (!pl.shuffle || !pl.list.length) return;
+    pl.order.splice(pl.i, 1);
+    for (let i = pl.order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pl.order[i], pl.order[j]] = [pl.order[j], pl.order[i]];
+    }
+    pl.order.unshift(pl.i);
+  }
+  function stepTrack(delta, play = !audio.paused) {
+    if (!pl.order.length) return;
+    load(pl.order[(pl.order.indexOf(pl.i) + delta + pl.order.length) % pl.order.length], play);
+  }
+  function drawShuffle() {
+    shuffleBtn.setAttribute('aria-pressed', String(pl.shuffle));
+    shuffleBtn.title = pl.shuffle ? 'Shuffle on' : 'Shuffle off';
+  }
+  function drawVolume() {
+    const value = Math.round(audio.volume * 100);
+    if (Number(volume.value) !== value) volume.value = value;
+    volume.setAttribute('aria-valuetext', value + '%');
+    volumeBtn.replaceChildren(svg(value ? 'volume' : 'muted'));
+    volumeBtn.title = 'Volume: ' + value + '%';
+    $('#pl-volume-value').textContent = value + '%';
+  }
+  function setVolume(value) {
+    audio.volume = Math.min(1, Math.max(0, Math.round(value * 100) / 100));
+  }
 
   function drawTrack() {
     const t = pl.list[pl.i];
@@ -339,13 +375,13 @@
     pl.dir = m.dir;
     pl.list = Array.isArray(m.tracks) ? m.tracks : [];
     for (const b of [$('#pl-prev'), $('#pl-next'), seek]) b.disabled = !pl.list.length;
-    if (pl.list.length) load(pl.i, false);
+    if (pl.list.length) { load(pl.i, false); orderTracks(); }
     else { audio.pause(); audio.removeAttribute('src'); drawTrack(); drawState(); }
   }
   // a freshly picked folder starts from its first song (the dialog click is the user gesture playAudio needs)
   const pickFolder = () => shell.pickMusic().then((m) => { if (!m) return; pl.i = 0; setMusic(m); playAudio(); }).catch(() => {});
-  const prev = () => { if (audio.currentTime > 3) audio.currentTime = 0; else load(pl.i - 1, !audio.paused); };
-  const next = () => load(pl.i + 1, !audio.paused);
+  const prev = () => { if (audio.currentTime > 3) audio.currentTime = 0; else stepTrack(-1); };
+  const next = () => stepTrack(1);
   function eqLoop() {
     pl.raf = requestAnimationFrame(eqLoop);
     if (!pl.an || app.activeId !== 'home') return; // an editor covers the rail
@@ -354,7 +390,8 @@
   }
   audio.addEventListener('play', () => { drawState(); cancelAnimationFrame(pl.raf); eqLoop(); });
   audio.addEventListener('pause', () => { drawState(); cancelAnimationFrame(pl.raf); bars.forEach((b) => { b.style.transform = ''; }); });
-  audio.addEventListener('ended', () => load(pl.i + 1, true));
+  audio.addEventListener('ended', () => stepTrack(1, true));
+  audio.addEventListener('volumechange', () => { drawVolume(); savePl(); });
   audio.addEventListener('error', drawState);
   audio.addEventListener('loadedmetadata', () => { $('#pl-len').textContent = '/ ' + mmss(audio.duration); });
   audio.addEventListener('timeupdate', () => {
@@ -370,10 +407,19 @@
   $('#pl-prev').addEventListener('click', prev);
   $('#pl-next').addEventListener('click', next);
   $('#pl-folder').addEventListener('click', pickFolder);
+  shuffleBtn.addEventListener('click', () => { pl.shuffle = !pl.shuffle; orderTracks(); drawShuffle(); savePl(); });
+  function showVolume(on) {
+    volumePopup.hidden = !on;
+    volumeBtn.setAttribute('aria-expanded', String(on));
+  }
+  volumeBtn.addEventListener('click', () => { showVolume(volumePopup.hidden); if (!volumePopup.hidden) volume.focus(); });
+  volume.addEventListener('input', () => setVolume(Number(volume.value) / 100));
+  document.addEventListener('pointerdown', (e) => { if (!volumePopup.contains(e.target) && !volumeBtn.contains(e.target)) showVolume(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !volumePopup.hidden) { showVolume(false); volumeBtn.focus(); } });
   $('#player').addEventListener('wheel', (e) => { // volume, shown in the clock's corner for a moment
+    if (!e.deltaY) return;
     e.preventDefault();
-    audio.volume = Math.min(1, Math.max(0, Math.round((audio.volume - Math.sign(e.deltaY) * 0.05) * 100) / 100));
-    savePl();
+    setVolume(audio.volume - Math.sign(e.deltaY) * 0.05);
     $('#clock').textContent = 'VOL ' + Math.round(audio.volume * 100);
     clearTimeout(pl.ft);
     pl.ft = setTimeout(tick, 1200);
@@ -388,6 +434,8 @@
   shell.music().then(setMusic).catch(() => {});
   drawTrack();
   drawState();
+  drawShuffle();
+  drawVolume();
 
   // Page change: the old page goes at once and the new one rises in section by section (css .page.enter).
   // No view transition here: its old/new snapshots double-exposed the two pages and stretched the hero between heights.
@@ -404,7 +452,7 @@
     return done;
   }
 
-  // also replayed when coming back from an editor tab (whichever page is showing behind it)
+  // not replayed when coming back from an editor tab: that page is already painted behind the view, replaying blanked it first
   function enterPage() {
     const pg = $('#main .page');
     if (!pg || reduced.matches) return;
@@ -491,6 +539,8 @@
       card('cell', { title: 'New spreadsheet', note: 'Tables and formulas', aria: 'New spreadsheet' }, () => shell.newDoc('cell')),
       card('slide', { title: 'New presentation', note: 'Slides', aria: 'New presentation' }, () => shell.newDoc('slide')),
       card('pdf', { title: 'Open PDF', note: 'Read and annotate', aria: 'Open PDF' }, openPdfCard)));
+    page.append(h('div', { id: 'default-slot' }));
+    drawDefault();
 
     const search = h('input', { type: 'search', placeholder: 'Search recent files', 'aria-label': 'Search recent files', value: app.query,
       oninput: (e) => { app.query = e.target.value; renderRecent(); clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 200); } });
@@ -503,6 +553,20 @@
     renderClear();
     renderRecent();
   }
+
+  // "Set as default" strip on Home while Explorer still opens .docx/.xlsx/.pptx/.pdf elsewhere.
+  // Windows only lets the user flip UserChoice, so the button opens Kiroku's Default apps page.
+  async function drawDefault() {
+    const slot = $('#default-slot');
+    if (!slot) return;
+    const others = await shell.defaultStatus().catch(() => []);
+    slot.textContent = '';
+    if (!others.length) return;
+    slot.append(h('div', { class: 'default-strip' },
+      h('p', { class: 'body' }, 'Explorer still opens ', h('b', { text: others.map((e) => '.' + e).join(' ') }), ' with another app.'),
+      h('button', { class: 'btn', type: 'button', onclick: () => shell.openDefaultApps() }, 'Set as default')));
+  }
+  window.addEventListener('focus', () => drawDefault());
 
   // Recent kind filter: small segmented control, remembered in settings (recentFilter).
   const FILTERS = [['all', 'All'], ['word', 'Docs'], ['cell', 'Sheets'], ['slide', 'Slides'], ['pdf', 'PDF']];
@@ -894,13 +958,18 @@
           h('div', { class: 'hint', text: 'Applies to documents opened after the change.' }))),
       row('03', 'Default apps', 'Let Explorer open files here.',
         h('p', { class: 'body', text: 'Windows will open its Default apps page — click “Set default” at the top to use Kiroku for documents, spreadsheets, presentations and PDFs.' }),
-        h('div', { style: { 'margin-top': '14px' } }, h('button', { class: 'btn', type: 'button', onclick: () => shell.openDefaultApps() }, 'Make Kiroku the default'))),
+        h('div', { style: { 'margin-top': '14px' } }, h('button', { class: 'btn', type: 'button', onclick: () => shell.openDefaultApps() }, 'Set as default'))),
       row('04', 'Privacy', 'Keep your recent list private.', encBox),
       row('05', 'Backups', 'Automatic recovery copies of open documents.', backupBox),
       row('06', 'About', 'Version and licence.',
         h('dl', { class: 'about' },
           h('dt', { text: 'Version' }), h('dd', { text: app.info ? app.info.version : '' }),
-          h('dt', { text: 'Editors' }), h('dd', { text: 'Editors built on ONLYOFFICE (AGPL-3.0)' }),
+          h('dt', { text: 'Editors' }), h('dd', null,
+            // ONLYOFFICE's license asks downstream builds to keep its logo (see THIRD-PARTY.md).
+            h('picture', { class: 'oo-logo' },
+              h('source', { srcset: 'assets/onlyoffice/logo-white.svg', media: '(prefers-color-scheme: dark)' }),
+              h('img', { src: 'assets/onlyoffice/logo.svg', alt: 'ONLYOFFICE', draggable: 'false' })),
+            h('div', { text: 'Editors built on ONLYOFFICE (AGPL-3.0)' })),
           h('dt', { text: 'Data folder' }), h('dd', { text: app.info ? app.info.userData : '' })))));
   }
 
@@ -936,7 +1005,6 @@
     const vid = $('.hero-vid'); // an editor view covers the shell: don't keep decoding behind it
     if (vid) { if (app.activeId === 'home') vid.play().catch(() => {}); else vid.pause(); }
     if (app.activeId === 'home' && lastActive !== 'home') loadRecent();
-    if (app.activeId === 'home' && lastActive && lastActive !== 'home') enterPage();
     lastActive = app.activeId;
   });
 })();
